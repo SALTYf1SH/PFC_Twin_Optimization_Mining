@@ -215,9 +215,9 @@ def get_balls_y_displacement_matrix(window_size, model_width, model_height, inte
             
             # Use numpy boolean indexing to find balls in window
             in_window = ((all_positions[:, 0] >= x_min) & 
-                        (all_positions[:, 0] <= x_max) &
-                        (all_positions[:, 1] >= y_min) & 
-                        (all_positions[:, 1] <= y_max))
+                         (all_positions[:, 0] <= x_max) &
+                         (all_positions[:, 1] >= y_min) & 
+                         (all_positions[:, 1] <= y_max))
             
             # Calculate average displacement if balls exist in window
             if np.any(in_window):

@@ -7,10 +7,8 @@
 This script combines a robust, crash-proof socket server with a detailed,
 multi-stage simulation logic.
 
-Final Revision 3: This version supports multi-step optimization. It runs the
-full excavation process, saves a displacement field CSV at each step,
-packages all CSV data into a single JSON object, and returns it to the client.
-
+REVISION 5: Corrected file path and name logic to match the output of the
+            user-provided utils.py script, resolving the data file not found issue.
 """
 
 # ==============================================================================
@@ -27,7 +25,7 @@ PROJECT_DIRECTORY = "F:\PFCprj\PFC_Twin_Optimization\PFC_model"
 # ==============================================================================
 #  * * * PATH VALIDATION AND SETUP * * *
 # ==============================================================================
-if "please" in PROJECT_DIRECTORY:
+if "Please fill in" in PROJECT_DIRECTORY:
     print("\n" + "="*80)
     print("[FATAL ERROR] Project path has not been set in the script.")
     print("Please open this script and modify the 'PROJECT_DIRECTORY' variable.")
@@ -84,8 +82,20 @@ DEFAULT_CONFIG = {
 # 1. SIMULATION WORKFLOW FUNCTIONS (REFACTORED FOR MULTI-STEP)
 # ==============================================================================
 def setup_temporary_environment(base_path, run_hash):
+    """
+    Creates a unique temporary directory for a single simulation run,
+    including all necessary subdirectories ('sav', 'mat', 'img', 'csv').
+    """
     run_path = os.path.join(base_path, run_hash)
-    paths = {"root": run_path, "sav": os.path.join(run_path, "sav"), "mat": os.path.join(run_path, "mat")}
+    # --- FIX: Added 'csv' to the list of required subdirectories ---
+    paths = {
+        "root": run_path,
+        "sav": os.path.join(run_path, "sav"),
+        "mat": os.path.join(run_path, "mat"),
+        "img": os.path.join(run_path, "img"),
+        "csv": os.path.join(run_path, "csv")
+    }
+    # --- END FIX ---
     for path in paths.values():
         os.makedirs(path, exist_ok=True)
     return paths
@@ -158,9 +168,11 @@ def run_excavation_and_collect_data(config, paths):
             resu_path=paths["root"]
         )
 
+        # --- FIX: Look for the correct filename in the correct directory ('csv') ---
         # 3. Read the generated CSV file and store its content
-        data_filename = f"displacement_field_{step_name}.csv"
-        data_filepath = os.path.join(paths["mat"], data_filename)
+        data_filename = f"resampled_displacement_{step_name}.csv"
+        data_filepath = os.path.join(paths["csv"], data_filename)
+        # --- END FIX ---
 
         if os.path.exists(data_filepath):
             with open(data_filepath, 'r') as f:

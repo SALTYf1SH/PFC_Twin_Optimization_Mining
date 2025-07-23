@@ -8,7 +8,8 @@ This client is designed to work with the multi-step PFC server. It optimizes
 parameters by comparing the entire excavation process (multiple steps) against
 a corresponding series of target data files.
 
-REVISION 2: Fixed JSON serialization error for numpy data types.
+REVISION 4: Formats large numbers into scientific notation strings before
+            sending them to the server for improved robustness.
 """
 import os
 import json
@@ -29,7 +30,7 @@ from knowledge_base_manager_mining import (warm_start_optimizer, load_from_knowl
 SERVER_LIST = [
     ('127.0.0.1', 50002),
 ]
-CONNECTION_TIMEOUT = 3600
+CONNECTION_TIMEOUT = 10000
 
 # Target Data Directory
 TARGET_DATA_ROOT_DIR = "target_data"
@@ -45,8 +46,9 @@ STEP_WEIGHTS = None
 
 # Parameter Space
 from skopt.space import Real, Integer
+
 PARAMETER_SPACE = [
-    Integer(20e9, 60e9, name='key_emod000'),
+    Real(20e9, 60e9, name='key_emod000'),
     Real(1.5, 3.0, name='key_kratio'),
     Real(2.0e6, 8.0e6, name='key_ten_'),
     Real(2.0e6, 8.0e6, name='key_coh_'),
@@ -63,13 +65,20 @@ def run_simulation_worker(params_list, server, target_case_dir, job_id):
     """
     params_dict = {p.name: v for p, v in zip(PARAMETER_SPACE, params_list)}
 
-    # --- FIX: Convert numpy types to native Python types for JSON serialization ---
+    # Step A: Convert numpy types to native Python types
     for key, value in params_dict.items():
         if isinstance(value, np.integer):
             params_dict[key] = int(value)
         elif isinstance(value, np.floating):
             params_dict[key] = float(value)
-    # --- END FIX ---
+
+    # --- NEW: Format large numbers into scientific notation strings for PFC ---
+    # PFC's FISH interpreter can handle numbers passed as strings.
+    # This ensures consistency and avoids potential float precision issues.
+    for key, value in params_dict.items():
+        if isinstance(value, (int, float)) and abs(value) >= 1e6: # Threshold for scientific notation
+            params_dict[key] = f"{value:.6e}" # Format as string, e.g., "4.500000e+10"
+    # --- END NEW ---
 
     print(f"[Job {job_id}] Testing parameters on {server[0]}:{server[1]}")
 
