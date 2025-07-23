@@ -1,0 +1,30 @@
+--- Simulation Parameters for Run: 3985a9c7b268 ---
+
+Parameters received from client:
+  key_emod000: 3.144557e+10
+  key_kratio: 1.8402771803463047
+  key_ten_: 5.307889e+06
+  key_coh_: 6.316814e+06
+  key_fric: 0.3692425840497844
+
+
+--- Full FISH Configuration (after type conversion) ---
+  pb_modules: 1000000000.0
+  emod000: 15000000000.0
+  ten_: 750000.0
+  coh_: 750000.0
+  fric: 0.1
+  kratio: 2.0
+  key_pb_modules: 3000000000.0
+  key_emod000: 31445570000.0
+  key_ten_: 5307889.0
+  key_coh_: 6316814.0
+  key_fric: 0.3692425840497844
+  key_kratio: 1.8402771803463047
+  pb_modules_1: 100000000.0
+  emod111: 100000000.0
+  ten1_: 100000.0
+  coh1_: 100000.0
+  fric1: 0.1
+  dpnr: 0.5
+  dpsr: 0.0

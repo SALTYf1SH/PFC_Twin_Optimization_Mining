@@ -7,8 +7,9 @@
 This script combines a robust, crash-proof socket server with a detailed,
 multi-stage simulation logic.
 
-REVISION 5: Corrected file path and name logic to match the output of the
-            user-provided utils.py script, resolving the data file not found issue.
+REVISION 7: Added functionality to save the parameters used for each run
+            into a 'parameters.txt' file within the corresponding
+            archived experiment folder.
 """
 
 # ==============================================================================
@@ -25,7 +26,7 @@ PROJECT_DIRECTORY = "F:\PFCprj\PFC_Twin_Optimization\PFC_model"
 # ==============================================================================
 #  * * * PATH VALIDATION AND SETUP * * *
 # ==============================================================================
-if "Please fill in" in PROJECT_DIRECTORY:
+if "222" in PROJECT_DIRECTORY:
     print("\n" + "="*80)
     print("[FATAL ERROR] Project path has not been set in the script.")
     print("Please open this script and modify the 'PROJECT_DIRECTORY' variable.")
@@ -79,15 +80,10 @@ DEFAULT_CONFIG = {
 }
 
 # ==============================================================================
-# 1. SIMULATION WORKFLOW FUNCTIONS (REFACTORED FOR MULTI-STEP)
+# 1. SIMULATION WORKFLOW FUNCTIONS
 # ==============================================================================
 def setup_temporary_environment(base_path, run_hash):
-    """
-    Creates a unique temporary directory for a single simulation run,
-    including all necessary subdirectories ('sav', 'mat', 'img', 'csv').
-    """
     run_path = os.path.join(base_path, run_hash)
-    # --- FIX: Added 'csv' to the list of required subdirectories ---
     paths = {
         "root": run_path,
         "sav": os.path.join(run_path, "sav"),
@@ -95,7 +91,6 @@ def setup_temporary_environment(base_path, run_hash):
         "img": os.path.join(run_path, "img"),
         "csv": os.path.join(run_path, "csv")
     }
-    # --- END FIX ---
     for path in paths.values():
         os.makedirs(path, exist_ok=True)
     return paths
@@ -134,30 +129,22 @@ def run_stage_two_equilibrium(config, layer_array, paths):
     itasca.command(f"model save '{save_file}'")
 
 def run_excavation_and_collect_data(config, paths):
-    """
-    Runs the full excavation process, saving the displacement field at each step
-    and collecting the CSV data into a dictionary.
-    """
     print("  [Sim] Running multi-step excavation and data collection...")
     start_x = config["LEFT_PILLAR_WIDTH"] - (config["MODEL_WIDTH"] / 2.0)
     end_x = (config["MODEL_WIDTH"] / 2.0) - config["RIGHT_PILLAR_WIDTH"]
     step_width = config["EXCAVATION_STEP_WIDTH"]
     num_steps = int((end_x - start_x) / step_width)
-
     all_steps_data = {}
 
     for i in range(num_steps):
         step_key = f"step_{i}"
         print(f"    -> Executing {step_key}...")
-
-        # 1. Excavate
         excavation_pos = start_x + i * step_width
         excavation_end = excavation_pos + step_width
         cmd = f"ball delete range group '{config['EXCAVATION_LAYER_GROUP']}' pos-x {excavation_pos} {excavation_end}"
         itasca.command(cmd)
         itasca.command(f"model solve cycle {config['SOLVE_CYCLES_PER_STEP']} or ratio-average {config['SOLVE_RATIO_TARGET']}")
-
-        # 2. Export displacement field for this step using the util function
+        
         step_name = f"excavation_face_{excavation_end:.2f}"
         plot_y_displacement_heatmap(
             window_size=itasca.fish.get('rdmax') * 2,
@@ -167,12 +154,9 @@ def run_excavation_and_collect_data(config, paths):
             interpolate='nearest',
             resu_path=paths["root"]
         )
-
-        # --- FIX: Look for the correct filename in the correct directory ('csv') ---
-        # 3. Read the generated CSV file and store its content
+        
         data_filename = f"resampled_displacement_{step_name}.csv"
         data_filepath = os.path.join(paths["csv"], data_filename)
-        # --- END FIX ---
 
         if os.path.exists(data_filepath):
             with open(data_filepath, 'r') as f:
@@ -181,7 +165,7 @@ def run_excavation_and_collect_data(config, paths):
             print(f"    -> Collected data for {step_key}.")
         else:
             print(f"    -> [WARN] Data file not found for {step_key} at {data_filepath}")
-            all_steps_data[step_key] = "" # Store empty string on failure
+            all_steps_data[step_key] = ""
 
     print("  [Sim] Multi-step excavation and data collection complete.")
     return all_steps_data
@@ -198,25 +182,46 @@ def _run_single_optimization_cycle(client_params):
     run_config = json.loads(json.dumps(DEFAULT_CONFIG))
     current_params = dict(run_config["EQUILIBRIUM_PARAMS_LIST"])
     for key, value in client_params.items():
-        current_params[key] = value
+        # The value from client might be a string (e.g., "1.23e+10"),
+        # so we convert it to a float for PFC.
+        try:
+            current_params[key] = float(value)
+        except (ValueError, TypeError):
+            current_params[key] = value # Keep as is if conversion fails
     run_config["EQUILIBRIUM_PARAMS_LIST"] = list(current_params.items())
 
     temp_base_path = os.path.join(PROJECT_DIRECTORY, "_temp_server_runs")
     paths = setup_temporary_environment(temp_base_path, run_hash)
     
+    # --- NEW: Save parameters to a text file inside the temp folder ---
     try:
-        # --- Run initial stages ---
+        param_file_path = os.path.join(paths["root"], "parameters.txt")
+        with open(param_file_path, 'w', encoding='utf-8') as f:
+            f.write(f"--- Simulation Parameters for Run: {run_hash} ---\n\n")
+            f.write("Parameters received from client:\n")
+            # Use the original client_params for this section for clarity
+            for key, value in client_params.items():
+                f.write(f"  {key}: {value}\n")
+            
+            f.write("\n\n--- Full FISH Configuration (after type conversion) ---\n")
+            # The run_config has the full set of parameters ready for FISH
+            for key, value in run_config["EQUILIBRIUM_PARAMS_LIST"]:
+                 f.write(f"  {key}: {value}\n")
+        print(f"  [Info] Parameters for this run saved to {param_file_path}")
+    except Exception as e:
+        print(f"  [WARN] Could not save parameters.txt file. Error: {e}")
+    # --- END NEW ---
+
+    try:
         itasca.command("model new")
         layer_array, _ = calculate_geology(run_config)
         run_stage_one_generation(run_config, paths)
         run_stage_two_equilibrium(run_config, layer_array, paths)
         itasca.command("ball attribute velocity 0 spin 0 displacement 0")
         
-        # --- Run excavation and collect all step data ---
         all_steps_data = run_excavation_and_collect_data(run_config, paths)
 
         if all_steps_data:
-            # Package the dictionary of CSV strings into a single JSON string
             return json.dumps(all_steps_data)
         else:
             return json.dumps({"error": "No data was collected during simulation."})
@@ -229,7 +234,21 @@ def _run_single_optimization_cycle(client_params):
     finally:
         itasca.command("model new")
         time.sleep(0.5)
-        shutil.rmtree(paths["root"], ignore_errors=True)
+        
+        # Archive the results instead of deleting
+        try:
+            experiments_dir = os.path.join(PROJECT_DIRECTORY, "experiments")
+            os.makedirs(experiments_dir, exist_ok=True)
+            destination_path = os.path.join(experiments_dir, run_hash)
+            
+            if os.path.exists(destination_path):
+                shutil.rmtree(destination_path)
+                
+            shutil.move(paths["root"], destination_path)
+            print(f"  [Archive] Successfully moved results to: {destination_path}")
+        except Exception as e:
+            print(f"  [Archive WARN] Could not archive results folder. Deleting it instead. Error: {e}")
+            shutil.rmtree(paths["root"], ignore_errors=True)
 
 # ==============================================================================
 # 3. SOCKET SERVER
@@ -243,6 +262,7 @@ def start_server(host='127.0.0.1', port=50002):
         server_socket.listen()
         print("\n" + "="*70)
         print(f" PFC Multi-Step Optimization Server is RUNNING on {host}:{port}")
+        print(" -> Archiving of experiment results is ENABLED.")
         print("="*70)
         
         while True:
@@ -258,7 +278,6 @@ def start_server(host='127.0.0.1', port=50002):
                 client_params = json.loads(data.decode('utf-8'))
                 print(f"[Server] Received parameters: {client_params}")
                 
-                # This now returns a JSON string containing all steps
                 results_json_string = _run_single_optimization_cycle(client_params)
                 
                 print("[Server] Simulation cycle finished. Sending multi-step JSON results...")
@@ -276,5 +295,5 @@ def start_server(host='127.0.0.1', port=50002):
 # ==============================================================================
 if __name__ == '__main__':
     HOST_IP = '127.0.0.1'
-    SERVER_PORT = 50002
+    SERVER_PORT = 50001
     start_server(host=HOST_IP, port=SERVER_PORT)

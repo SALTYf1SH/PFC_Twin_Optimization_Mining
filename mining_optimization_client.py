@@ -30,7 +30,7 @@ from knowledge_base_manager_mining import (warm_start_optimizer, load_from_knowl
 SERVER_LIST = [
     ('127.0.0.1', 50002),
 ]
-CONNECTION_TIMEOUT = 10000
+CONNECTION_TIMEOUT = 3600
 
 # Target Data Directory
 TARGET_DATA_ROOT_DIR = "target_data"
@@ -72,13 +72,10 @@ def run_simulation_worker(params_list, server, target_case_dir, job_id):
         elif isinstance(value, np.floating):
             params_dict[key] = float(value)
 
-    # --- NEW: Format large numbers into scientific notation strings for PFC ---
-    # PFC's FISH interpreter can handle numbers passed as strings.
-    # This ensures consistency and avoids potential float precision issues.
+    # Step B: Format large numbers into scientific notation strings for PFC
     for key, value in params_dict.items():
         if isinstance(value, (int, float)) and abs(value) >= 1e6: # Threshold for scientific notation
             params_dict[key] = f"{value:.6e}" # Format as string, e.g., "4.500000e+10"
-    # --- END NEW ---
 
     print(f"[Job {job_id}] Testing parameters on {server[0]}:{server[1]}")
 
