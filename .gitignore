@@ -1,0 +1,7 @@
+*.sav
+*.png
+*.json
+*.csv
+*.npz
+*.txt
+*.pyc
